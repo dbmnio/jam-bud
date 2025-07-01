@@ -37,21 +37,83 @@ class AudioManager {
      * then configures and starts the AVAudioEngine.
      */
     init() {
-        setupEngine()
+        // Asynchronously request microphone permission and setup the engine on success.
+        requestMicrophonePermission { [weak self] granted in
+            guard let self = self else { return }
+            if granted {
+                DispatchQueue.main.async {
+                    self.setupEngine()
+                }
+            } else {
+                print("Microphone permission was not granted. Audio engine will not be set up.")
+            }
+        }
+    }
+
+    deinit {
+        // Ensure the engine is stopped when the manager is deallocated.
+        engine.stop()
+    }
+
+    /**
+     * Requests permission to access the microphone.
+     *
+     * This method checks the current authorization status and, if undetermined,
+     * prompts the user for permission. It uses a completion handler to report success.
+     * @param completion A closure that returns true if access is granted, otherwise false.
+     */
+    private func requestMicrophonePermission(completion: @escaping (Bool) -> Void) {
+        switch AVCaptureDevice.authorizationStatus(for: .audio) {
+        case .authorized: // The user has previously granted access to the microphone.
+            print("Microphone access previously granted.")
+            completion(true)
+        case .notDetermined: // The user has not yet been asked for microphone access.
+            AVCaptureDevice.requestAccess(for: .audio) { granted in
+                if granted {
+                    print("Microphone access has been granted.")
+                } else {
+                    print("Microphone access has been denied.")
+                }
+                completion(granted)
+            }
+        case .denied: // The user has previously denied access.
+            print("Microphone access was previously denied.")
+            completion(false)
+        case .restricted: // The user can't grant access due to restrictions.
+            print("Microphone access is restricted.")
+            completion(false)
+        @unknown default:
+            print("Unknown authorization status for microphone.")
+            completion(false)
+        }
     }
 
     /**
      * Configures the AVAudioEngine and its audio graph.
      *
      * Attaches the main mixer node to the engine and connects it to the
-     * default output node. It then starts the engine.
+     * default output node. It then prepares and starts the engine.
      */
     private func setupEngine() {
+        let inputNode = engine.inputNode
+        let outputNode = engine.outputNode
+        
+        // Use the hardware's native formats to avoid any mismatch.
+        let inputFormat = inputNode.outputFormat(forBus: 0)
+        let outputFormat = outputNode.outputFormat(forBus: 0)
+
         engine.attach(mainMixer)
-        engine.connect(mainMixer, to: engine.outputNode, format: nil)
+
+        // Connect the nodes using their native formats.
+        engine.connect(inputNode, to: mainMixer, format: inputFormat)
+        engine.connect(mainMixer, to: outputNode, format: outputFormat)
+        
+        // Prepare the engine before starting. This is crucial.
+        engine.prepare()
         
         do {
             try engine.start()
+            print("Audio engine started successfully.")
         } catch {
             print("Failed to start audio engine: \(error)")
         }
@@ -72,6 +134,15 @@ class AudioManager {
 
         let inputNode = engine.inputNode
         let format = inputNode.outputFormat(forBus: 0)
+
+        // --- Diagnostic Check ---
+        // Ensure the input node is available and has channels.
+        guard format.channelCount > 0 else {
+            print("ERROR: Microphone not available or has 0 channels.")
+            print("Please ensure a microphone is connected and the app has the correct entitlements.")
+            return
+        }
+
         let tempDir = FileManager.default.temporaryDirectory
         // Using a unique filename based on the timestamp
         recordingOutputFileURL = tempDir.appendingPathComponent("loop_\(Date().timeIntervalSince1970).caf")

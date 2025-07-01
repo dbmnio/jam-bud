@@ -1,8 +1,8 @@
 # Implementation Plan: Phase 1, Task 1 - Native Audio Engine (Swift)
 
-This document provides a step-by-step plan for implementing the core audio functionality of the AI Music Looper application as outlined in `implementation-overview.md`. This work will be done within the `JamSession3` Xcode project.
+This document provides a step-by-step plan for implementing the core audio functionality of the AI Music Looper application as outlined in `implementation-overview.md`. This work has been completed.
 
-## 1. Create a Dedicated Audio Manager
+## ✅ 1. Create a Dedicated Audio Manager
 
 To maintain a clean and modular architecture, all `AVAudioEngine` logic should be encapsulated within its own class.
 
@@ -21,7 +21,7 @@ class AudioManager {
 }
 ```
 
-## 2. Initialize the Audio Engine and Graph
+## ✅ 2. Initialize the Audio Engine and Graph
 
 The foundation of our audio system is the `AVAudioEngine` and its node graph. We will set up an engine with a main mixer to combine all our audio tracks.
 
@@ -66,7 +66,7 @@ private func setupEngine() {
 }
 ```
 
-## 3. Implement Recording Logic
+## ✅ 3. Implement Recording Logic
 
 Recording requires tapping into the engine's input node and writing the incoming audio data to a file.
 
@@ -107,7 +107,7 @@ func startRecording() {
 }
 ```
 
-## 4. Implement Loop Creation and Playback
+## ✅ 4. Implement Loop Creation and Playback
 
 This is the core of the looper. When recording stops, we create a new player node, load the recorded file, and schedule it for looped playback.
 
@@ -153,7 +153,7 @@ func stopRecordingAndCreateLoop(trackID: String) {
 }
 ```
 
-## 5. Implement Transport Controls
+## ✅ 5. Implement Transport Controls
 
 Provide simple methods to control the overall playback of all active loops.
 
@@ -188,7 +188,24 @@ func stopAll() {
 
 Once the `AudioManager` is complete, it needs to be instantiated and controlled from a higher-level component that communicates with the Python backend. For now, we can plan to call these methods from `ContentView.swift` for testing, and later from a dedicated `AgentClient`.
 
+**Status:** ✅ A temporary integration with `ContentView.swift` was completed for testing purposes.
+
 **Next Steps (for Task 2):**
 - An instance of `AudioManager` will be created.
 - The component responsible for network communication will hold a reference to the `AudioManager` instance.
 - When a command like `{"action": "start_recording"}` is received from the Python server, the corresponding `AudioManager` method (`startRecording()`) will be called.
+
+---
+
+## Key Implementation Learnings
+
+The implementation process revealed several critical, macOS-specific details for handling real-time audio with `AVAudioEngine`:
+
+*   **No `AVAudioSession` on macOS:** Unlike iOS, macOS does not use `AVAudioSession` for configuration. The engine connects directly to the system's default devices.
+*   **Sandbox Entitlements are Crucial:** For a sandboxed app, two permissions are mandatory:
+    1.  **Info.plist:** A `Privacy - Microphone Usage Description` key is required to explain to the user why microphone access is needed.
+    2.  **.entitlements File:** The `com.apple.security.device.audio-input` (Audio Input) capability must be enabled to allow the app to access the microphone hardware.
+*   **Handle Asynchronous Permissions:** Microphone permission requests are asynchronous. The `AVAudioEngine` must only be configured and started *after* the user has granted permission. This was handled by using a completion handler.
+*   **Match Hardware Audio Formats:** Hardcoding audio formats (e.g., a 44.1kHz sample rate) can cause a crash if it doesn't match the actual hardware's native format. The correct approach is to query the `inputNode` and `outputNode` for their respective `outputFormat(forBus:)` and use those formats when connecting the audio graph.
+*   **Engine Preparation:** The `engine.prepare()` method must be called before `engine.start()` to allocate necessary resources and prevent errors.
+*   **Legacy Component Errors:** The `AddInstanceForFactory` error was a symptom of an underlying engine configuration problem (specifically, the format mismatch), which caused the system to fall back and fail while trying to load an obsolete Carbon component.
