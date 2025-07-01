@@ -21,7 +21,7 @@ The goal of this phase is to establish the project structure and the communicati
 2. **macOS Project Setup:** ✅
    * Create a new Xcode project using the SwiftUI App template.  
    * Confirm project settings for macOS deployment.  
-3. **Communication Bridge:**  
+3. **Communication Bridge:** ✅
    * **Python:** Create a basic FastAPI server with a single POST endpoint (e.g., /command) that accepts a JSON payload (e.g., {"text": "user command"}) and returns a JSON response (e.g., {"action": "none"}).  
    * **Swift:** Write a simple network client to send a POST request to the local Python server (http://127.0.0.1:8000/command) and parse the JSON response.
 

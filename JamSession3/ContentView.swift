@@ -4,80 +4,76 @@
 //
 //  Created by David Matthew on 7/1/25.
 //
+//  This is the main view of the application. It provides a simple
+//  interface for sending commands to the AI agent.
+//
 
 import SwiftUI
-import CoreData
 
 struct ContentView: View {
-    @Environment(\.managedObjectContext) private var viewContext
+    // The client for communicating with the Python agent
+    private let agentClient = AgentClient()
 
-    @FetchRequest(
-        sortDescriptors: [NSSortDescriptor(keyPath: \Item.timestamp, ascending: true)],
-        animation: .default)
-    private var items: FetchedResults<Item>
+    // State to hold the last response from the agent for display
+    @State private var agentResponse: String = "Waiting for command..."
+    @State private var hasError: Bool = false
 
     var body: some View {
-        NavigationView {
-            List {
-                ForEach(items) { item in
-                    NavigationLink {
-                        Text("Item at \(item.timestamp!, formatter: itemFormatter)")
-                    } label: {
-                        Text(item.timestamp!, formatter: itemFormatter)
-                    }
-                }
-                .onDelete(perform: deleteItems)
+        VStack(spacing: 20) {
+            Text("AI Music Looper")
+                .font(.largeTitle)
+
+            // A text view to display the agent's response
+            Text(agentResponse)
+                .font(.body)
+                .padding()
+                .frame(minWidth: 0, maxWidth: .infinity)
+                .background(hasError ? Color.red.opacity(0.2) : Color.gray.opacity(0.2))
+                .cornerRadius(8)
+
+
+            // A button to send a "record" command
+            Button("Send 'Record' Command") {
+                sendCommand("record")
             }
-            .toolbar {
-                ToolbarItem {
-                    Button(action: addItem) {
-                        Label("Add Item", systemImage: "plus")
-                    }
-                }
+            .buttonStyle(.borderedProminent)
+
+            // A button to send a "stop" command
+            Button("Send 'Stop' Command") {
+                sendCommand("stop")
             }
-            Text("Select an item")
+            .buttonStyle(.bordered)
         }
+        .padding()
+        .frame(minWidth: 400, minHeight: 300)
     }
 
-    private func addItem() {
-        withAnimation {
-            let newItem = Item(context: viewContext)
-            newItem.timestamp = Date()
-
+    /// Sends a command to the agent and updates the UI with the response.
+    /// - Parameter command: The text of the command to send.
+    private func sendCommand(_ command: String) {
+        // Use a Task to perform the async network call
+        Task {
             do {
-                try viewContext.save()
+                let response = try await agentClient.sendCommand(commandText: command)
+                // Update the UI on the main thread
+                await MainActor.run {
+                    self.agentResponse = "Action: \(response.action), Status: \(response.status)"
+                    self.hasError = false
+                    print("Successfully received response: \(response)")
+                }
             } catch {
-                // Replace this implementation with code to handle the error appropriately.
-                // fatalError() causes the application to generate a crash log and terminate. You should not use this function in a shipping application, although it may be useful during development.
-                let nsError = error as NSError
-                fatalError("Unresolved error \(nsError), \(nsError.userInfo)")
-            }
-        }
-    }
-
-    private func deleteItems(offsets: IndexSet) {
-        withAnimation {
-            offsets.map { items[$0] }.forEach(viewContext.delete)
-
-            do {
-                try viewContext.save()
-            } catch {
-                // Replace this implementation with code to handle the error appropriately.
-                // fatalError() causes the application to generate a crash log and terminate. You should not use this function in a shipping application, although it may be useful during development.
-                let nsError = error as NSError
-                fatalError("Unresolved error \(nsError), \(nsError.userInfo)")
+                // Update the UI on the main thread
+                await MainActor.run {
+                    self.agentResponse = "Error: \(error.localizedDescription)"
+                    self.hasError = true
+                    print("Error sending command: \(error)")
+                }
             }
         }
     }
 }
 
-private let itemFormatter: DateFormatter = {
-    let formatter = DateFormatter()
-    formatter.dateStyle = .short
-    formatter.timeStyle = .medium
-    return formatter
-}()
 
 #Preview {
-    ContentView().environment(\.managedObjectContext, PersistenceController.preview.container.viewContext)
+    ContentView()
 }
