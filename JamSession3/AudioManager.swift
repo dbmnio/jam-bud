@@ -25,7 +25,7 @@ class AudioManager {
 
     private var engine = AVAudioEngine()
     private var mainMixer = AVAudioMixerNode()
-    private var playerNodes = [AVAudioPlayerNode]()
+    private var playerNodes = [String: AVAudioPlayerNode]()
     private var isRecording = false
     private var recordingOutputFileURL: URL?
     private var outputFile: AVAudioFile?
@@ -200,7 +200,7 @@ class AudioManager {
             try audioFile.read(into: buffer)
 
             let playerNode = AVAudioPlayerNode()
-            playerNodes.append(playerNode)
+            playerNodes[trackID] = playerNode
             
             engine.attach(playerNode)
             engine.connect(playerNode, to: mainMixer, format: format)
@@ -214,6 +214,22 @@ class AudioManager {
     }
 
     /**
+     * Sets the volume for a specific audio track.
+     *
+     * @param trackID The identifier of the track to modify.
+     * @param volume The new volume level, from 0.0 (silent) to 1.0 (full volume).
+     */
+    func setVolume(forTrack trackID: String, volume: Float) {
+        guard let playerNode = playerNodes[trackID] else {
+            print("Error: Track with ID \(trackID) not found for volume adjustment.")
+            return
+        }
+        // Ensure volume is clamped between 0.0 and 1.0
+        playerNode.volume = max(0.0, min(volume, 1.0))
+        print("Set volume for track \(trackID) to \(volume)")
+    }
+
+    /**
      * Starts playback for all created audio loops.
      *
      * Iterates through all existing player nodes and calls the play() method on each.
@@ -223,7 +239,7 @@ class AudioManager {
              print("Engine not running.")
              return
         }
-        for player in playerNodes {
+        for player in playerNodes.values {
             player.play()
         }
         print("Playing all loops.")
@@ -235,7 +251,7 @@ class AudioManager {
      * Iterates through all existing player nodes and calls the stop() method on each.
      */
     func stopAll() {
-        for player in playerNodes {
+        for player in playerNodes.values {
             player.stop()
         }
         print("Stopped all loops.")
