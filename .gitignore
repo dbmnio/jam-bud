@@ -2,3 +2,4 @@
 *.pyc
 /JamSession3.xcodeproj
 .DS_Store
+python/project.db
