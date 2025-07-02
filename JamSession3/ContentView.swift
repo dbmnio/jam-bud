@@ -19,6 +19,7 @@ struct ContentView: View {
 
     @State private var agentStatus: String = "Ready"
     @State private var trackCount = 0
+    @State private var isRecordingLoop = false
 
     init() {
         // Create the AudioManager first
@@ -30,10 +31,10 @@ struct ContentView: View {
     }
 
     var body: some View {
-        VStack(spacing: 20) {
+        VStack(spacing: 15) {
             Text("AI Music Looper")
                 .font(.largeTitle)
-                .padding()
+                .padding(.bottom, 5)
 
             // Display for agent status and transcribed text
             VStack {
@@ -47,23 +48,37 @@ struct ContentView: View {
             }
             .padding()
 
-            // The main interaction button
-            Button(action: {
-                if speechManager.isRecording {
-                    speechManager.stopTranscribing()
-                    // After stopping, immediately send the command
-                    if !speechManager.transcribedText.isEmpty {
-                        postCommand(speechManager.transcribedText)
-                    }
-                } else {
-                    speechManager.startTranscribing()
+            // Main interaction buttons
+            HStack(spacing: 20) {
+                // Button 1: Record/Stop Toggle
+                Button(action: {
+                    let command = isRecordingLoop ? "stop" : "record"
+                    postCommand(command)
+                }) {
+                    Text(isRecordingLoop ? "Stop" : "Record")
+                        .frame(width: 150, height: 50)
+                        .background(isRecordingLoop ? Color.red : Color.green)
+                        .foregroundColor(.white)
+                        .cornerRadius(10)
                 }
-            }) {
-                Text(speechManager.isRecording ? "Stop Listening" : "Push to Talk")
-                    .frame(width: 200, height: 50)
-                    .background(speechManager.isRecording ? Color.red : Color.blue)
-                    .foregroundColor(.white)
-                    .cornerRadius(10)
+
+                // Button 2: Push to Talk
+                Button(action: {
+                    if speechManager.isRecording {
+                        speechManager.stopTranscribing()
+                        if !speechManager.transcribedText.isEmpty {
+                            postCommand(speechManager.transcribedText)
+                        }
+                    } else {
+                        speechManager.startTranscribing()
+                    }
+                }) {
+                    Text(speechManager.isRecording ? "Listening..." : "Push to Talk")
+                        .frame(width: 150, height: 50)
+                        .background(speechManager.isRecording ? Color.purple : Color.blue)
+                        .foregroundColor(.white)
+                        .cornerRadius(10)
+                }
             }
             .padding()
 
@@ -102,6 +117,7 @@ struct ContentView: View {
             switch action {
             case "start_recording":
                 audioManager.startRecording()
+                isRecordingLoop = true
                 agentStatus = "Recording..."
             case "stop_recording_and_create_loop":
                 guard let trackID = response.track_id else {
@@ -110,6 +126,7 @@ struct ContentView: View {
                 }
                 audioManager.stopRecordingAndCreateLoop(trackID: trackID)
                 trackCount += 1
+                isRecordingLoop = false
                 agentStatus = "Looping \(trackCount) track(s)"
                 // Automatically start playing all tracks after creating a new one.
                 audioManager.playAll()
@@ -120,6 +137,20 @@ struct ContentView: View {
                 }
                 audioManager.setVolume(forTrack: trackID, volume: volume)
                 agentStatus = "Set volume for \(trackID) to \(volume)"
+            case "mute_track":
+                guard let trackID = response.track_id else {
+                    agentStatus = "Error: mute_track action missing track_id"
+                    return
+                }
+                audioManager.muteTrack(trackID: trackID)
+                agentStatus = "Muted track \(trackID)"
+            case "unmute_track":
+                guard let trackID = response.track_id, let volume = response.volume else {
+                    agentStatus = "Error: unmute_track action missing parameters"
+                    return
+                }
+                audioManager.unmuteTrack(trackID: trackID, volume: volume)
+                agentStatus = "Unmuted track \(trackID)"
             default:
                 agentStatus = "Received unknown action: \(action)"
             }

@@ -229,6 +229,13 @@ class AudioManager: ObservableObject {
 
             playerNode.scheduleBuffer(buffer, at: nil, options: .loops)
             
+            // A small delay might be needed to ensure the node is ready before playing.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                if self.engine.isRunning {
+                    playerNode.play()
+                }
+            }
+            
             print("Loop created for trackID: \(trackID)")
         } catch {
             print("Failed to create loop: \(error)")
@@ -271,6 +278,35 @@ class AudioManager: ObservableObject {
         // Ensure volume is clamped between 0.0 and 1.0
         playerNode.volume = max(0.0, min(volume, 1.0))
         print("Set volume for track \(trackID) to \(volume)")
+    }
+
+    /**
+     * Mutes a specific audio track by setting its volume to zero.
+     *
+     * @param trackID The identifier of the track to mute.
+     */
+    func muteTrack(trackID: String) {
+        guard let playerNode = playerNodes[trackID] else {
+            print("Error: Track with ID \(trackID) not found for muting.")
+            return
+        }
+        playerNode.volume = 0.0
+        print("Muted track \(trackID)")
+    }
+    
+    /**
+     * Unmutes a specific audio track by restoring its volume.
+     *
+     * @param trackID The identifier of the track to unmute.
+     * @param volume The volume level to restore the track to.
+     */
+    func unmuteTrack(trackID: String, volume: Float) {
+        guard let playerNode = playerNodes[trackID] else {
+            print("Error: Track with ID \(trackID) not found for unmuting.")
+            return
+        }
+        playerNode.volume = max(0.0, min(volume, 1.0))
+        print("Unmuted track \(trackID) to volume \(volume)")
     }
 
     /**

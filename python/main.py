@@ -10,6 +10,7 @@ class Track(TypedDict):
     id: str
     name: str
     volume: float
+    is_playing: bool
     # path: str # To be added later
 
 class AgentState(TypedDict):
@@ -43,6 +44,15 @@ def router_node(state: AgentState):
             return "modify_track_node"
         else:
             return "fallback_node"
+    elif "mute" in command or "unmute" in command:
+        # Simple parsing for now. LLM will handle this properly.
+        # Assume it applies to the last track for now.
+        if state["tracks"]:
+            track_id = state["tracks"][-1]["id"]
+            state["modification_args"] = {"track_id": track_id}
+            return "toggle_playback_node"
+        else:
+            return "fallback_node"
     else:
         return "fallback_node"
 
@@ -59,7 +69,7 @@ def stop_node(state: AgentState):
     new_track_id = f"track_{state['next_track_id']}"
     
     # Update internal state
-    new_track = Track(id=new_track_id, name=f"Loop {state['next_track_id']}", volume=1.0)
+    new_track = Track(id=new_track_id, name=f"Loop {state['next_track_id']}", volume=1.0, is_playing=True)
     state["tracks"].append(new_track)
     state["next_track_id"] += 1
     
@@ -91,6 +101,39 @@ def modify_track_node(state: AgentState):
     }
     return state
 
+def toggle_playback_node(state: AgentState):
+    """Updates the state and prepares the command for the Swift audio engine to mute or unmute."""
+    print("Executing toggle_playback_node")
+    args = state.get("modification_args")
+    if not args:
+        return "fallback_node"
+
+    track_id = args["track_id"]
+    
+    action = ""
+    volume_for_unmute = 1.0 # Default volume
+
+    # Update the internal state
+    for track in state["tracks"]:
+        if track["id"] == track_id:
+            # Toggle the playing state
+            track["is_playing"] = not track["is_playing"]
+            volume_for_unmute = track["volume"]
+            if track["is_playing"]:
+                action = "unmute_track"
+            else:
+                action = "mute_track"
+            print(f"Toggled track {track_id} to is_playing: {track['is_playing']}")
+            break
+            
+    # Prepare the command for Swift
+    state["response"] = {
+        "action": action,
+        "track_id": track_id,
+        "volume": volume_for_unmute # Only used for unmuting, ignored for muting
+    }
+    return state
+
 def fallback_node(state: AgentState):
     """Handles commands that are not understood."""
     print("Executing fallback_node")
@@ -108,6 +151,7 @@ node_map = {
     "record_node": record_node,
     "stop_node": stop_node,
     "modify_track_node": modify_track_node,
+    "toggle_playback_node": toggle_playback_node,
     "fallback_node": fallback_node
 }
 
