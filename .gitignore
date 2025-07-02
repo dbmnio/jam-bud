@@ -1,3 +1,4 @@
 /python/jamsession3
 *.pyc
 /JamSession3.xcodeproj
+.DS_Store
