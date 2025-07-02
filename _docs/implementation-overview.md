@@ -64,19 +64,19 @@ The goal is a functional, non-UI application where a user can layer audio loops 
 
 ## **Phase 2: Introducing Voice & AI Intelligence (3-4 Days)**
 
-The goal is to replace text input with real voice commands and make the agent capable of understanding natural language.
+The goal is to replace text input with real voice commands and make the agent capable of understanding natural language. This phase also includes key UX improvements, such as a dedicated record/stop button and non-destructive track muting, to create a more intuitive and flexible user workflow.
 
 #### **Tasks:**
 
-1. **Voice Integration (Swift):**  
+1. **Voice Integration (Swift):** ✅ 
    * Integrate SFSpeechRecognizer for speech-to-text. Implement a "push-to-talk" mechanic (e.g., holding a key).  
    * When transcription is complete, send the resulting text to the Python agent.  
    * Integrate AVSpeechSynthesizer for text-to-speech. The app should speak any text returned in a {"speak": "..."} payload from the agent.  
-2. **Agent Intelligence (Python):**  
+2. **Agent Intelligence (Python):** ✅ 
    * Enhance the LangGraph State to be a list of track objects, each with an id, name, volume, etc.  
    * Upgrade the RouterNode to use an LLM (via LangChain) to parse user intent. It should be able to understand commands like "make the first loop quieter" and translate it into a structured command: {"action": "set\_volume", "track\_id": "track\_001", "value": 0.7}.  
    * Add a ModifyTrackNode to the graph that handles these structured commands.  
-3. **Native Audio Enhancements (Swift):**  
+3. **Native Audio Enhancements (Swift):** ✅ 
    * Add functions to the AVAudioEngine controller to handle the new actions, like setVolume(trackID: String, volume: Float).
 
 #### **✅** Testing & Verification for Phase 2:

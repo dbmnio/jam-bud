@@ -63,3 +63,11 @@ The project will be considered successful if:
 * The system responds to commands and performs audio operations with latency low enough to not disrupt a musician's creative workflow.  
 * The AI agent can provide relevant and musically coherent suggestions.  
 * The "undo" functionality works reliably, allowing for a non-destructive creative process.
+
+## **7. Evolution of the User Interface & Workflow**
+
+Through initial implementation and testing, the core concept of a voice-controlled looper has evolved to better suit a musician's creative workflow. The following key changes have been implemented:
+
+*   **Hybrid Interaction Model:** The initial idea of a purely voice-driven interface has been updated. While voice commands remain central for creative and modification tasks (e.g., "add a bassline," "make that quieter"), the time-sensitive action of starting and stopping a recording has been mapped to a dedicated **Record/Stop toggle button** in the UI. This change acknowledges that the physical, tactile precision of a button is superior for timing musical loops, reducing cognitive load and improving the reliability of the core looping feature.
+
+*   **Non-Destructive Workflow:** A core principle that has emerged is that of a non-destructive creative process. When a user creates a loop, it is not permanently deleted if it is removed from the main mix. Instead, we have implemented a **Mute/Unmute** system. Tracks can be silenced and brought back later, allowing musicians to experiment freely and revisit "happy accidents" without fear of losing their work. This is managed by the agent's internal state and controlled via voice commands (e.g., "mute the last track").
