@@ -158,6 +158,10 @@ The goal is to evolve the application into a powerful, timeline-based sequencer 
     *   Implement a "playback head" that can be moved to different sections on the timeline.
 5.  **UI for Arrangement (SwiftUI):**
     *   Develop a basic visual representation of the timeline, showing the sections and the audio clips within them.
+6.  **Advanced Undo System (Undo Tree):**
+    *   **Backend Logic (Python):** Activate the full branching capabilities of the `HistoryManager`. Implement agent tools for `redo` (including branch selection logic), `go_to_checkpoint`, `name_checkpoint`, and `query_history`.
+    *   **Frontend UI (SwiftUI):** Design and implement a visual undo tree graph UI. This view will allow users to see their project's entire history, view different branches, and click any node to instantly revert the session state to that point.
+    *   **Agent Interaction:** Enhance the agent with the ability to have a dialogue about the project's history (e.g., "You have two branches here. Which one do you want to follow?").
 
 #### **✅** Testing & Verification for Phase 5:
 
@@ -165,3 +169,6 @@ The goal is to evolve the application into a powerful, timeline-based sequencer 
 *   Speak "Take the guitar from the intro and move it to the chorus." **Expected:** The guitar track is audibly moved and layered into the chorus section.
 *   Speak "Find the quietest part and loop it." **Expected:** The agent analyzes the audio, finds the section with the lowest RMS volume, and begins looping it.
 *   Speak "Let's call this part 'the bridge'." **Expected:** The current section can now be referred to as "the bridge" in subsequent commands.
+*   Speak "Checkpoint this as 'Verse Idea 2'." **Expected:** The agent saves the current state with a name.
+*   After making changes, speak "Go back to 'Verse Idea 2'." **Expected:** The application state reverts to the named checkpoint.
+*   Open the history view. **Expected:** A graph of the project's history is visible and navigable.
