@@ -31,9 +31,10 @@ def router_node(state: AgentState):
     command = state.get("command", "").lower()
     print(f"Routing command: {command}")
 
-    if "record" in command:
+    # Use exact matching for commands sent by the dedicated UI button.
+    if command == "record":
         return "record_node"
-    elif "stop" in command:
+    elif command == "stop":
         return "stop_node"
     elif "quieter" in command or "lower" in command or "volume" in command:
         # Simple parsing for now. LLM will handle this properly.
