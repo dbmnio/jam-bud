@@ -136,3 +136,32 @@ The goal is to turn the project into a distributable macOS application.
 * Archive the app in Xcode.  
 * Install the .app file on a clean macOS machine (or a different user account).  
 * **Success Criteria:** The application launches, the Python backend starts automatically, and all features from Phases 1-3 work correctly without requiring any manual setup from the user.
+
+## **Phase 5: Timeline, Arrangement & Semantic Awareness (Future)**
+
+The goal is to evolve the application into a powerful, timeline-based sequencer that understands user intent and musical context, allowing for complex song arrangement.
+
+#### **Tasks:**
+
+1.  **Advanced State Model (Python):**
+    *   Enhance the agent's state to include a list of `Section` objects (e.g., intro, verse, chorus) with defined start/end times and a list of user-defined `aliases`.
+    *   Add a `startTime` property to each `Track` object to position it on a timeline.
+2.  **Advanced Agent Logic (Python):**
+    *   Implement new agent tools for arrangement, such as `move_clip`, `define_section`, and `set_loop_region`.
+    *   Implement a `name_section` tool to allow users to explicitly name sections (e.g., "Name this section the chorus").
+    *   Implement an `analyze_and_find_section` tool to handle implicit, descriptive commands (e.g., "Loop over the quiet part").
+3.  **Audio Analysis Engine (Python):**
+    *   Integrate an audio analysis library (e.g., `librosa`) to extract technical features like volume, tempo, and beat structure from audio clips.
+    *   (Stretch Goal) Integrate multimodal LLM capabilities to analyze and understand semantic descriptions of music (e.g., "dreamy," "energetic").
+4.  **Playback Engine Upgrade (Swift):**
+    *   Refactor the `AudioManager` to manage a playback timeline and schedule audio clips at specific start times using `scheduleSegment`.
+    *   Implement a "playback head" that can be moved to different sections on the timeline.
+5.  **UI for Arrangement (SwiftUI):**
+    *   Develop a basic visual representation of the timeline, showing the sections and the audio clips within them.
+
+#### **✅** Testing & Verification for Phase 5:
+
+*   Speak "Loop over the chorus." **Expected:** The app correctly identifies the chorus section and loops it.
+*   Speak "Take the guitar from the intro and move it to the chorus." **Expected:** The guitar track is audibly moved and layered into the chorus section.
+*   Speak "Find the quietest part and loop it." **Expected:** The agent analyzes the audio, finds the section with the lowest RMS volume, and begins looping it.
+*   Speak "Let's call this part 'the bridge'." **Expected:** The current section can now be referred to as "the bridge" in subsequent commands.
