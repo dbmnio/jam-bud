@@ -126,16 +126,22 @@ The goal is to turn the project into a distributable macOS application.
 2. **Application Integration:**  
    * Bundle the Python executable inside the main macOS application package (.app).  
    * Modify the Swift app to launch the Python executable as a background child process when the app starts and terminate it on quit.  
-3. **Finalization:**  
+3. **Project Management (Open/Save):**
+    *   **Project Bundle:** Define a file bundle format (e.g., `.jamproject`). This will be a directory containing the project-specific `project.sqlite` database and an `audio/` folder for all associated loops.
+    *   **Backend Updates:** Modify the `HistoryManager` to be initialized with a path to the active project's database file. All audio file paths in the state snapshots must be stored relative to the project bundle's root.
+    *   **Frontend UI:** Implement a standard "File" menu in the SwiftUI app with "New", "Open", "Save", and "Save As" options, using native `NSOpenPanel` and `NSSavePanel` for the dialogs.
+    *   **State Management:** The Swift app will be responsible for managing the "active project context" and ensuring the `HistoryManager` and `AudioManager` are working with the correct files.
+4. **Finalization:**  
    * Implement robust error handling for both the native and Python components.  
    * Add comprehensive logging to help debug issues.  
-   * Perform end-to-end regression testing of all features.
 
 #### **✅** Testing & Verification for Phase 4:
 
 * Archive the app in Xcode.  
 * Install the .app file on a clean macOS machine (or a different user account).  
 * **Success Criteria:** The application launches, the Python backend starts automatically, and all features from Phases 1-3 work correctly without requiring any manual setup from the user.
+*   Create a new project, save it, close the app, and re-open the project. **Expected:** All tracks and history are loaded correctly.
+*   Use "Save As" to create a duplicate of a project. **Expected:** A new, independent project bundle is created on disk.
 
 ## **Phase 5: Timeline, Arrangement & Semantic Awareness (Future)**
 
@@ -172,3 +178,33 @@ The goal is to evolve the application into a powerful, timeline-based sequencer 
 *   Speak "Checkpoint this as 'Verse Idea 2'." **Expected:** The agent saves the current state with a name.
 *   After making changes, speak "Go back to 'Verse Idea 2'." **Expected:** The application state reverts to the named checkpoint.
 *   Open the history view. **Expected:** A graph of the project's history is visible and navigable.
+
+---
+
+## Appendix: Design Discussion on Project Management (Open/Save)
+
+This section documents the decision to add multi-project support to the application.
+
+### The Need for Project Scoping
+
+The initial implementation plan did not explicitly define how users would manage different musical projects. The system was designed as a single, continuous session. To turn the application into a practical tool, users need the ability to create, save, and load distinct projects.
+
+### The Implementation Strategy
+
+The solution involves three main components:
+
+1.  **Project Bundles:** To keep all related data together, we will adopt a project bundle format (e.g., `.jamproject`). This is a standard macOS practice where a directory is treated as a single file by the user. Each bundle will contain the project-specific SQLite database for history and a dedicated `audio/` folder for all its associated sound files.
+2.  **Database Scoping:** Instead of a single global database, each project bundle will have its own `project.sqlite` file. This is a simpler and more robust approach than adding a `project_id` to a global table, as it completely isolates project data and simplifies backup and file management for the user.
+3.  **Standard UI:** The application will feature a standard "File" menu with "New", "Open", "Save", and "Save As" functionality, using native macOS dialogs to handle user interaction.
+
+### Rationale for Deferring to Phase 4
+
+The decision was made to place this feature in Phase 4 after confirming that implementing it later poses **no significant risk of a major refactor**.
+
+The key reasons are:
+
+*   **It is an Additive Feature:** Project management is a "context" change, not a core "logic" change. The agent's creative and musical functions do not need to be rewritten; they only need to be told which project's files they are working on.
+*   **Changes are Contained:** The necessary modifications are well-isolated within the `HistoryManager` (which will be given a path to the correct database) and the `AudioManager` (which will be given a path to the correct audio directory).
+*   **No Data Migration:** As this will be implemented before public use, there is no need to write complex or risky scripts to migrate user data from an old format.
+
+By adding this in Phase 4, we can focus on the core creative tools in Phase 3 while being confident that this essential file management functionality can be integrated smoothly later on.
