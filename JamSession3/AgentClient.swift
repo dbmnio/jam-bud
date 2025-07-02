@@ -2,73 +2,52 @@
 //  AgentClient.swift
 //  JamSession3
 //
-//  Created by AI Assistant on 6/14/24.
+//  Created by I.T. on 2024-07-15.
 //
-//  This file defines the network client responsible for communicating
-//  with the Python-based AI agent server.
+//  This file defines the AgentClient class, which is responsible for
+//  communicating with the Python-based AI agent backend.
 //
 
 import Foundation
 
-/// Defines the structure for the JSON response from the agent.
-/// Must be `Codable` to be easily decoded from the network response.
+/// The response structure from the agent's /command endpoint.
 struct AgentResponse: Codable {
     let action: String
     let status: String
 }
 
-/// Defines the structure for the JSON request sent to the agent.
-/// Must be `Codable` to be easily encoded for the network request.
+/// A request structure for sending a command to the agent.
 struct CommandRequest: Codable {
     let text: String
 }
 
-/// An enumeration to represent potential networking errors.
-enum AgentClientError: Error {
-    case invalidURL
-    case networkError(Error)
-    case decodingError(Error)
-    case encodingError(Error)
-}
-
-/// The `AgentClient` class handles all communication with the Python backend.
-/// It sends commands and receives actions to be executed by the audio engine.
+/// A client to send commands to the Python agent and receive actions.
 class AgentClient {
+    private let agentURL = URL(string: "http://127.0.0.1:8000/command")!
 
-    private let serverURL: URL?
-
-    init(urlString: String = "http://127.0.0.1:8000/command") {
-        self.serverURL = URL(string: urlString)
-    }
-
-    /// Sends a text command to the Python agent server.
-    /// - Parameter commandText: The string command to be sent (e.g., "record").
-    /// - Returns: An `AgentResponse` object decoded from the server's JSON response.
-    /// - Throws: An `AgentClientError` if the URL is invalid, or if there is a
-    ///           networking, encoding, or decoding error.
+    /// Sends a command to the agent's backend.
+    /// - Parameter commandText: The command string to send (e.g., "record").
+    /// - Returns: An `AgentResponse` containing the action to be taken.
+    /// - Throws: An error if the network request fails or decoding fails.
     func sendCommand(commandText: String) async throws -> AgentResponse {
-        guard let url = serverURL else {
-            throw AgentClientError.invalidURL
-        }
-
-        var request = URLRequest(url: url)
+        var request = URLRequest(url: agentURL)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
-        let commandRequest = CommandRequest(text: commandText)
-        do {
-            request.httpBody = try JSONEncoder().encode(commandRequest)
-        } catch {
-            throw AgentClientError.encodingError(error)
+        let command = CommandRequest(text: commandText)
+        let requestBody = try JSONEncoder().encode(command)
+        request.httpBody = requestBody
+
+        print("Sending command: '\(commandText)' to agent...")
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
+
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            throw URLError(.badServerResponse)
         }
         
-        let (data, _) = try await URLSession.shared.data(for: request)
-
-        do {
-            let agentResponse = try JSONDecoder().decode(AgentResponse.self, from: data)
-            return agentResponse
-        } catch {
-            throw AgentClientError.decodingError(error)
-        }
+        let agentResponse = try JSONDecoder().decode(AgentResponse.self, from: data)
+        print("Received action: '\(agentResponse.action)' from agent.")
+        return agentResponse
     }
 } 

@@ -38,7 +38,7 @@ The goal is a functional, non-UI application where a user can layer audio loops 
 
 #### **Tasks:**
 
-1. **Native Audio Engine (Swift):**  
+1. **Native Audio Engine (Swift):** ✅ 
    * Implement the AVAudioEngine.  
    * Create the core audio graph: multiple AVAudioPlayerNode instances feeding into an AVAudioMixerNode, which then connects to the main output.  
    * Implement functions for:  
@@ -46,10 +46,10 @@ The goal is a functional, non-UI application where a user can layer audio loops 
      * stopRecordingAndCreateLoop(trackID: String): This function stops recording, saves the audio to a temporary file, and schedules it to play on a new AVAudioPlayerNode.  
      * playAll()  
      * stopAll()  
-2. **Agent-to-Audio Control (Swift):**  
+2. **Agent-to-Audio Control (Swift):** ✅ 
    * Modify the network client to parse action commands from the Python agent's JSON response (e.g., {"action": "start\_recording"}).  
    * Create a switch statement to call the appropriate AVAudioEngine function based on the received action.  
-3. **Basic Agent Logic (Python):**  
+3. **Basic Agent Logic (Python):** ✅ 
    * Create the initial LangGraph State, which can be as simple as {"track\_count": int}.  
    * Implement a single RouterNode in LangGraph. This node will not use an LLM yet; it will use simple if/else logic to parse commands like "record", "stop", "play".  
    * Based on the command, the node will return the appropriate JSON action to be sent back to the Swift app.
