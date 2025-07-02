@@ -21,14 +21,20 @@ import AVFoundation
  * It provides methods to start and stop recording, create new loop players,
  * and control the transport (play/stop) of all active loops.
  */
-class AudioManager {
+class AudioManager: ObservableObject {
 
+    // Define a type for a closure that consumes audio buffers.
+    typealias AudioBufferConsumer = (AVAudioPCMBuffer) -> Void
+    
     private var engine = AVAudioEngine()
     private var mainMixer = AVAudioMixerNode()
     private var playerNodes = [String: AVAudioPlayerNode]()
     private var isRecording = false
     private var recordingOutputFileURL: URL?
     private var outputFile: AVAudioFile?
+    
+    // A dictionary to hold multiple consumers of the live audio stream.
+    private var bufferConsumers = [String: AudioBufferConsumer]()
 
     /**
      * Initializes the AudioManager.
@@ -108,6 +114,15 @@ class AudioManager {
         engine.connect(inputNode, to: mainMixer, format: inputFormat)
         engine.connect(mainMixer, to: outputNode, format: outputFormat)
         
+        // Install a single tap on the input node. This tap will distribute the
+        // buffer to all registered consumers.
+        inputNode.installTap(onBus: 0, bufferSize: 1024, format: inputFormat) { [weak self] (buffer, when) in
+            guard let self = self else { return }
+            for consumer in self.bufferConsumers.values {
+                consumer(buffer)
+            }
+        }
+        
         // Prepare the engine before starting. This is crucial.
         engine.prepare()
         
@@ -150,13 +165,19 @@ class AudioManager {
         do {
             outputFile = try AVAudioFile(forWriting: recordingOutputFileURL!, settings: format.settings)
             
-            inputNode.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] (buffer, when) in
+            // Define the consumer closure for writing to the file.
+            let loopRecorderConsumer: AudioBufferConsumer = { [weak self] buffer in
+                guard let self = self, self.isRecording else { return }
                 do {
-                    try self?.outputFile?.write(from: buffer)
+                    try self.outputFile?.write(from: buffer)
                 } catch {
                     print("Error writing buffer to file: \(error)")
                 }
             }
+            
+            // Register the file writer as a consumer of the audio stream.
+            addAudioBufferConsumer(loopRecorderConsumer, withKey: "loopRecorder")
+
             isRecording = true
             print("Started recording.")
         } catch {
@@ -176,7 +197,8 @@ class AudioManager {
     func stopRecordingAndCreateLoop(trackID: String) {
         guard isRecording else { return }
 
-        engine.inputNode.removeTap(onBus: 0)
+        // Unregister the file writer from the audio stream.
+        removeAudioBufferConsumer(withKey: "loopRecorder")
         isRecording = false
         
         // De-initialize the output file to ensure all data is written to disk.
@@ -210,6 +232,28 @@ class AudioManager {
             print("Loop created for trackID: \(trackID)")
         } catch {
             print("Failed to create loop: \(error)")
+        }
+    }
+
+    /**
+     * Adds a new consumer for the live audio input buffer.
+     *
+     * @param consumer A closure that will be called with each new audio buffer.
+     * @param key A unique string to identify the consumer.
+     */
+    func addAudioBufferConsumer(_ consumer: @escaping AudioBufferConsumer, withKey key: String) {
+        bufferConsumers[key] = consumer
+        print("Added audio consumer with key: \(key)")
+    }
+    
+    /**
+     * Removes an existing consumer of the live audio input buffer.
+     *
+     * @param key The unique key identifying the consumer to remove.
+     */
+    func removeAudioBufferConsumer(withKey key: String) {
+        if bufferConsumers.removeValue(forKey: key) != nil {
+            print("Removed audio consumer with key: \(key)")
         }
     }
 

@@ -18,18 +18,21 @@ class SpeechManager: NSObject, ObservableObject {
     @Published var transcribedText: String = ""
     @Published var isRecording: Bool = false
     
+    // Dependencies
+    private var audioManager: AudioManager
+    
     // Speech Recognition
     private let speechRecognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))!
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
     
-    // Audio Engine for Speech
-    private let audioEngine = AVAudioEngine()
-    
     // Speech Synthesis
     private let speechSynthesizer = AVSpeechSynthesizer()
 
-    override init() {
+    /// Initializes the SpeechManager.
+    /// - Parameter audioManager: The shared AudioManager instance.
+    init(audioManager: AudioManager) {
+        self.audioManager = audioManager
         super.init()
         speechRecognizer.delegate = self
     }
@@ -50,32 +53,19 @@ class SpeechManager: NSObject, ObservableObject {
         }
     }
 
-    /// Starts the audio engine and begins transcribing speech.
+    /// Starts transcribing speech by consuming audio from the AudioManager.
     func startTranscribing() {
         guard !isRecording else { return }
         
-        // Cancel the previous task if it's running.
         if let recognitionTask = recognitionTask {
             recognitionTask.cancel()
             self.recognitionTask = nil
         }
         
-        let audioSession = AVAudioSession.sharedInstance()
-        do {
-            try audioSession.setCategory(.record, mode: .measurement, options: .duckOthers)
-            try audioSession.setActive(true, options: .notifyOthersOnDeactivation)
-        } catch {
-            print("audioSession properties weren't set because of an error.")
-            return
-        }
-        
         recognitionRequest = SFSpeechAudioBufferRecognitionRequest()
-        
-        let inputNode = audioEngine.inputNode
         guard let recognitionRequest = recognitionRequest else {
             fatalError("Unable to create an SFSpeechAudioBufferRecognitionRequest object")
         }
-        
         recognitionRequest.shouldReportPartialResults = true
         
         recognitionTask = speechRecognizer.recognitionTask(with: recognitionRequest) { result, error in
@@ -87,38 +77,36 @@ class SpeechManager: NSObject, ObservableObject {
             }
             
             if error != nil || isFinal {
-                self.audioEngine.stop()
-                inputNode.removeTap(onBus: 0)
-                
-                self.recognitionRequest = nil
-                self.recognitionTask = nil
-                self.isRecording = false
+                self.stopTranscribing() // Ensure we stop if the task ends
             }
         }
         
-        let recordingFormat = inputNode.outputFormat(forBus: 0)
-        inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { (buffer, when) in
-            self.recognitionRequest?.append(buffer)
-        }
-        
-        audioEngine.prepare()
-        
-        do {
-            try audioEngine.start()
-        } catch {
-            print("audioEngine couldn't start because of an error.")
-        }
-        
+        // Register as a consumer with the AudioManager
+        audioManager.addAudioBufferConsumer(self.handleAudioBuffer, withKey: "speechRecognizer")
+
         isRecording = true
         transcribedText = ""
     }
+    
+    /// Receives an audio buffer from the AudioManager and appends it to the recognition request.
+    /// - Parameter buffer: The audio buffer from the microphone input.
+    private func handleAudioBuffer(buffer: AVAudioPCMBuffer) {
+        self.recognitionRequest?.append(buffer)
+    }
 
-    /// Stops transcription and the audio engine.
+    /// Stops transcription.
     func stopTranscribing() {
         guard isRecording else { return }
-        audioEngine.stop()
+        
+        // Unregister from the AudioManager
+        audioManager.removeAudioBufferConsumer(withKey: "speechRecognizer")
+        
         recognitionRequest?.endAudio()
-        isRecording = false
+        recognitionTask?.cancel() // Use cancel to ensure task is fully torn down
+        
+        self.recognitionRequest = nil
+        self.recognitionTask = nil
+        self.isRecording = false
     }
     
     /// Speaks the given text using the system's voice.
@@ -126,7 +114,6 @@ class SpeechManager: NSObject, ObservableObject {
     func speak(_ text: String) {
         let utterance = AVSpeechUtterance(string: text)
         utterance.voice = AVSpeechSynthesisVoice(language: "en-US")
-        utterance.rate = AVSpeechUtterance.defaultSpeechRate
         speechSynthesizer.speak(utterance)
     }
 }

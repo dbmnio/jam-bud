@@ -12,12 +12,22 @@ import SwiftUI
 
 struct ContentView: View {
     // State Objects for managing app logic
-    @StateObject private var speechManager = SpeechManager()
     @StateObject private var audioManager = AudioManager()
+    // SpeechManager now depends on AudioManager, so we initialize it in the view's init.
+    @StateObject private var speechManager: SpeechManager
     @StateObject private var agentClient = AgentClient()
 
     @State private var agentStatus: String = "Ready"
     @State private var trackCount = 0
+
+    init() {
+        // Create the AudioManager first
+        let audioManager = AudioManager()
+        // Now create the SpeechManager and pass the AudioManager to it
+        _speechManager = StateObject(wrappedValue: SpeechManager(audioManager: audioManager))
+        // Assign the same AudioManager instance to the property
+        _audioManager = StateObject(wrappedValue: audioManager)
+    }
 
     var body: some View {
         VStack(spacing: 20) {
