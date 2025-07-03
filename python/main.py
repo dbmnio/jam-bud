@@ -4,6 +4,8 @@ import uvicorn
 from typing import List, Dict, TypedDict, Optional
 
 from history_manager import HistoryManager
+from nodes.music_generation_node import music_generation_node
+from nodes.suggestion_nodes import analysis_node, suggestion_node
 
 # --- History Manager Setup ---
 # This will manage our state history in a SQLite database.
@@ -18,7 +20,7 @@ class Track(TypedDict):
     name: str
     volume: float
     is_playing: bool
-    # path: str # To be added later
+    path: Optional[str]
 
 class AgentState(TypedDict):
     """The complete state of our music agent."""
@@ -64,11 +66,18 @@ def router_node(state: AgentState):
             return "toggle_playback_node"
         else:
             return "fallback_node"
+    elif "add a beat" in command or "add drums" in command or "generate music" in command:
+        return "music_generation_node"
+    elif "what should i add" in command or "suggestion" in command or "what's next" in command:
+        return "analysis_node" # Start the suggestion flow
     else:
         return "fallback_node"
 
+def analysis_node_router(state: AgentState):
+    """A simple router that always directs from analysis to suggestion."""
+    return "suggestion_node"
 
-def record_node(state: AgentState):
+def record_node(state: AgentState, history: HistoryManager):
     """Prepares the command to start recording. This is a non-state-changing action."""
     print("Executing record node")
     state["response"] = {"action": "start_recording"}
@@ -76,7 +85,7 @@ def record_node(state: AgentState):
     # The new state is only committed when recording stops.
     return state
 
-def stop_node(state: AgentState):
+def stop_node(state: AgentState, history: HistoryManager):
     """Stops recording, creates a new track, and commits the new state."""
     print("Executing stop node")
 
@@ -87,7 +96,7 @@ def stop_node(state: AgentState):
     new_track_id = f"track_{state['next_track_id']}"
     
     # Update internal state
-    new_track = Track(id=new_track_id, name=f"Loop {state['next_track_id']}", volume=1.0, is_playing=True)
+    new_track = Track(id=new_track_id, name=f"Loop {state['next_track_id']}", volume=1.0, is_playing=True, path=None)
     new_state["tracks"].append(new_track)
     new_state["next_track_id"] += 1
     
@@ -100,7 +109,7 @@ def stop_node(state: AgentState):
 
     return new_state
 
-def modify_track_node(state: AgentState):
+def modify_track_node(state: AgentState, history: HistoryManager):
     """Updates a track's state and commits the change to history."""
     print("Executing modify_track_node")
     args = state.get("modification_args")
@@ -133,7 +142,7 @@ def modify_track_node(state: AgentState):
     
     return new_state
 
-def toggle_playback_node(state: AgentState):
+def toggle_playback_node(state: AgentState, history: HistoryManager):
     """Toggles a track's playback state and commits the change."""
     print("Executing toggle_playback_node")
     args = state.get("modification_args")
@@ -174,7 +183,7 @@ def toggle_playback_node(state: AgentState):
     
     return new_state
 
-def undo_node(state: AgentState):
+def undo_node(state: AgentState, history: HistoryManager):
     """Loads the parent state from the history manager."""
     print("Executing undo_node")
     current_node_id = state.get("history_node_id")
@@ -210,7 +219,7 @@ def undo_node(state: AgentState):
         return new_state
 
 
-def fallback_node(state: AgentState):
+def fallback_node(state: AgentState, history: HistoryManager):
     """Handles commands that are not understood."""
     print("Executing fallback_node")
     state["response"] = {"speak": "I'm not sure how to do that."}
@@ -241,6 +250,9 @@ node_map = {
     "modify_track_node": modify_track_node,
     "toggle_playback_node": toggle_playback_node,
     "undo_node": undo_node,
+    "music_generation_node": music_generation_node,
+    "analysis_node": analysis_node,
+    "suggestion_node": suggestion_node,
     "fallback_node": fallback_node
 }
 
@@ -276,18 +288,36 @@ async def process_command(command: Command):
     # 1. Set the command in the state for this request
     state_for_request["command"] = command.text
 
-    # 2. Run the router to decide the next step
-    next_node_name = router_node(state_for_request)
+    # 2. Run the router to find the first node
+    current_node_name = router_node(state_for_request)
     
-    # 3. Execute the chosen node
-    if next_node_name in node_map:
-        node_function = node_map[next_node_name]
-        final_state = node_function(state_for_request)
-        # Ensure the response always contains the latest history node ID
-        final_state["response"]["history_node_id"] = final_state.get("history_node_id")
-        response = final_state.get("response", {})
-    else:
-        response = {"speak": "Error: Could not find a path to handle that command."}
+    # 3. Execute the node(s) in a loop until a final response is ready.
+    # This simulates a multi-step graph execution.
+    while True:
+        if current_node_name not in node_map:
+            response = {"speak": f"Error: Could not find node '{current_node_name}'."}
+            break
+
+        node_function = node_map[current_node_name]
+        state_for_request = node_function(state_for_request, history)
+        
+        # If the node produced a response for the user, we are done.
+        if "response" in state_for_request and state_for_request["response"]:
+            # Ensure the response always contains the latest history node ID
+            final_state = state_for_request
+            final_state["response"]["history_node_id"] = final_state.get("history_node_id")
+            response = final_state.get("response", {})
+            break
+        
+        # --- Hardcoded routing for multi-step flows ---
+        # In a real LangGraph app, this would be handled by conditional edges.
+        if current_node_name == "analysis_node":
+            current_node_name = analysis_node_router(state_for_request)
+        else:
+            # If no specific routing is defined, the flow ends.
+            # This shouldn't be reached if nodes are designed correctly.
+            response = {"speak": "An unexpected error occurred in the agent's logic."}
+            break
             
     print(f"Responding with: {response}")
     return response
