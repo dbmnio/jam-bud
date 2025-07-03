@@ -21,6 +21,8 @@ class Track(TypedDict):
     volume: float
     is_playing: bool
     path: Optional[str]
+    reverb: float # Wet/dry mix, 0.0 to 100.0
+    delay: float  # Wet/dry mix, 0.0 to 100.0
 
 class AgentState(TypedDict):
     """The complete state of our music agent."""
@@ -57,6 +59,22 @@ def router_node(state: AgentState):
         if state["tracks"]:
             track_id = state["tracks"][-1]["id"]
             state["modification_args"] = {"track_id": track_id, "volume": 0.5} # Hardcoded for now
+            return "modify_track_node"
+        else:
+            return "fallback_node"
+    elif "reverb" in command:
+        if state["tracks"]:
+            track_id = state["tracks"][-1]["id"]
+            # For now, we'll hardcode the reverb value. An LLM would extract this.
+            state["modification_args"] = {"track_id": track_id, "reverb": 50.0}
+            return "modify_track_node"
+        else:
+            return "fallback_node"
+    elif "delay" in command:
+        if state["tracks"]:
+            track_id = state["tracks"][-1]["id"]
+            # For now, we'll hardcode the delay value. An LLM would extract this.
+            state["modification_args"] = {"track_id": track_id, "delay": 50.0}
             return "modify_track_node"
         else:
             return "fallback_node"
@@ -118,7 +136,7 @@ def stop_node(state: AgentState, history: HistoryManager):
     new_track_id = f"track_{state['next_track_id']}"
     
     # Update internal state
-    new_track = Track(id=new_track_id, name=f"Loop {state['next_track_id']}", volume=1.0, is_playing=True, path=None)
+    new_track = Track(id=new_track_id, name=f"Loop {state['next_track_id']}", volume=1.0, is_playing=True, path=None, reverb=0.0, delay=0.0)
     new_state["tracks"].append(new_track)
     new_state["next_track_id"] += 1
     
@@ -139,27 +157,49 @@ def modify_track_node(state: AgentState, history: HistoryManager):
     """Updates a track's state and commits the change to history."""
     print("Executing modify_track_node")
     args = state.get("modification_args")
-    if not args:
+    if not args or "track_id" not in args:
         return "fallback_node"
 
     new_state = state.copy()
     new_state["tracks"] = [t.copy() for t in state["tracks"]]
 
     track_id = args["track_id"]
-    new_volume = args["volume"]
+    
+    # This node is now multi-purpose. We determine the action based on the args.
+    action = ""
+    response_args = {}
 
-    # Update the internal state
+    # Find the track and update it
     for track in new_state["tracks"]:
         if track["id"] == track_id:
-            track["volume"] = new_volume
-            print(f"Updated track {track_id} volume to {new_volume}")
+            if "volume" in args:
+                action = "set_volume"
+                new_value = args["volume"]
+                track["volume"] = new_value
+                response_args = {"volume": new_value}
+                print(f"Updated track {track_id} volume to {new_value}")
+            elif "reverb" in args:
+                action = "set_reverb"
+                new_value = args["reverb"]
+                track["reverb"] = new_value
+                response_args = {"value": new_value}
+                print(f"Updated track {track_id} reverb to {new_value}")
+            elif "delay" in args:
+                action = "set_delay"
+                new_value = args["delay"]
+                track["delay"] = new_value
+                response_args = {"value": new_value}
+                print(f"Updated track {track_id} delay to {new_value}")
+            else:
+                # No valid modification argument was found
+                return fallback_node(state, history)
             break
             
     # Prepare the command for Swift
     new_state["response"] = {
-        "action": "set_volume",
+        "action": action,
         "track_id": track_id,
-        "volume": new_volume
+        **response_args
     }
 
     # Commit the new state

@@ -37,6 +37,7 @@ struct AgentResponse: Codable {
     let speak: String?
     let track_id: String?
     let volume: Float?
+    let value: Float? // Generic value for effects like reverb/delay
     let track: Track? // For the 'add_new_track' action
     let state: AgentState? // For the 'load_state' action
     let history_node_id: String?

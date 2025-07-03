@@ -90,11 +90,11 @@ class AppState: ObservableObject {
                 audioManager.setVolume(forTrack: trackID, volume: volume)
             }
         case "set_reverb":
-            if let trackID = response.track_id, let value = response.volume {
+            if let trackID = response.track_id, let value = response.value {
                 audioManager.setReverb(for: trackID, to: value)
             }
         case "set_delay":
-            if let trackID = response.track_id, let value = response.volume {
+            if let trackID = response.track_id, let value = response.value {
                 audioManager.setDelay(for: trackID, to: value)
             }
         case "mute_track":
