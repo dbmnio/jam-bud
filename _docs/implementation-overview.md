@@ -101,10 +101,10 @@ The goal is to implement the core creative features that make the app powerful a
 3. **Creative Suggestions (Python):** ✅ **Completed (Placeholder)**
    * Implement an `AnalysisNode` that can summarize the current state (e.g., "A 120 BPM track in A Minor with guitar and drums").  
    * Feed this summary to a `SuggestionNode` that uses an LLM to generate creative ideas.
-4. **Audio Effects (Swift):**  
+4. **Audio Effects (Swift):**  ✅ **Completed**
    * Integrate native Audio Unit effects (e.g., AVAudioUnitReverb, AVAudioUnitDelay) into the AVAudioEngine graph.  
    * Expose controls for these effects so the Python agent can enable/disable them on specific tracks.  
-5. **Basic UI (SwiftUI):**  
+5. **Basic UI (SwiftUI):**  ✅ **Completed**
    * Develop a minimal UI that visualizes the current tracks in the State.  
    * Include a "listening" indicator and basic transport controls. The UI should be a read-only reflection of the agent's state.
 
