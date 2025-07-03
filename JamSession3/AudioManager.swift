@@ -38,6 +38,11 @@ class AudioManager: ObservableObject {
     private var isRecording = false
     private var recordingOutputFileURL: URL?
     private var outputFile: AVAudioFile?
+    private var audioConverter: AVAudioConverter?
+    
+    // Define a canonical audio format for all processing within the app.
+    // This avoids issues with sample rate and channel count mismatches.
+    private let canonicalFormat = AVAudioFormat(standardFormatWithSampleRate: 44100.0, channels: 2)!
     
     // A dictionary to hold multiple consumers of the live audio stream.
     private var bufferConsumers = [String: AudioBufferConsumer]()
@@ -116,12 +121,16 @@ class AudioManager: ObservableObject {
 
         engine.attach(mainMixer)
 
-        // Connect the nodes using their native formats.
-        engine.connect(inputNode, to: mainMixer, format: inputFormat)
+        // Connect the input to the main mixer. Using 'nil' for the format allows
+        // the engine to handle any necessary format conversions automatically,
+        // which prevents both crashes and potential sample rate mismatches.
+        engine.connect(inputNode, to: mainMixer, format: nil)
+        
+        // Connect the main mixer to the hardware output.
         engine.connect(mainMixer, to: outputNode, format: outputFormat)
         
-        // Install a single tap on the input node. This tap will distribute the
-        // buffer to all registered consumers.
+        // Install a single tap on the input node. This tap must use the native
+        // hardware format of the input.
         inputNode.installTap(onBus: 0, bufferSize: 1024, format: inputFormat) { [weak self] (buffer, when) in
             guard let self = self else { return }
             for consumer in self.bufferConsumers.values {
@@ -154,34 +163,66 @@ class AudioManager: ObservableObject {
         }
 
         let inputNode = engine.inputNode
-        let format = inputNode.outputFormat(forBus: 0)
+        let inputFormat = inputNode.outputFormat(forBus: 0)
 
         // --- Diagnostic Check ---
         // Ensure the input node is available and has channels.
-        guard format.channelCount > 0 else {
+        guard inputFormat.channelCount > 0 else {
             print("ERROR: Microphone not available or has 0 channels.")
             print("Please ensure a microphone is connected and the app has the correct entitlements.")
             return
         }
 
+        // Initialize the audio converter.
+        audioConverter = AVAudioConverter(from: inputFormat, to: canonicalFormat)
+        if audioConverter == nil {
+            print("ERROR: Failed to create audio converter. Check formats.")
+            return
+        }
+        
         let tempDir = FileManager.default.temporaryDirectory
-        // Using a unique filename based on the timestamp
         recordingOutputFileURL = tempDir.appendingPathComponent("loop_\(Date().timeIntervalSince1970).caf")
 
         do {
-            outputFile = try AVAudioFile(forWriting: recordingOutputFileURL!, settings: format.settings)
+            // The output file is created with the CANONICAL format.
+            outputFile = try AVAudioFile(forWriting: recordingOutputFileURL!, settings: canonicalFormat.settings)
             
-            // Define the consumer closure for writing to the file.
-            let loopRecorderConsumer: AudioBufferConsumer = { [weak self] buffer in
-                guard let self = self, self.isRecording else { return }
-                do {
-                    try self.outputFile?.write(from: buffer)
-                } catch {
-                    print("Error writing buffer to file: \(error)")
+            // This consumer closure will convert and write the audio.
+            let loopRecorderConsumer: AudioBufferConsumer = { [weak self] inputBuffer in
+                guard let self = self, self.isRecording, let converter = self.audioConverter else { return }
+                
+                // Prepare a buffer to receive the converted audio.
+                // The frame capacity must be calculated based on the sample rate ratio.
+                let ratio = self.canonicalFormat.sampleRate / inputFormat.sampleRate
+                let outputFrameCapacity = AVAudioFrameCount(Double(inputBuffer.frameLength) * ratio)
+                guard let outputBuffer = AVAudioPCMBuffer(pcmFormat: self.canonicalFormat, frameCapacity: outputFrameCapacity) else {
+                    print("ERROR: Failed to create output buffer for conversion.")
+                    return
+                }
+
+                // Perform the conversion.
+                var error: NSError? = nil
+                let status = converter.convert(to: outputBuffer, error: &error) { inNumPackets, outStatus in
+                    outStatus.pointee = .haveData
+                    return inputBuffer
+                }
+
+                // Check for errors during conversion.
+                if status == .error || error != nil {
+                    print("ERROR: Audio conversion failed: \(error?.localizedDescription ?? "Unknown error")")
+                    return
+                }
+
+                // Write the CONVERTED buffer to the file.
+                if status == .haveData {
+                    do {
+                        try self.outputFile?.write(from: outputBuffer)
+                    } catch {
+                        print("Error writing converted buffer to file: \(error)")
+                    }
                 }
             }
             
-            // Register the file writer as a consumer of the audio stream.
             addAudioBufferConsumer(loopRecorderConsumer, withKey: "loopRecorder")
 
             isRecording = true
@@ -207,8 +248,9 @@ class AudioManager: ObservableObject {
         removeAudioBufferConsumer(withKey: "loopRecorder")
         isRecording = false
         
-        // De-initialize the output file to ensure all data is written to disk.
+        // De-initialize the output file and converter
         outputFile = nil
+        audioConverter = nil
         
         print("Stopped recording.")
         
@@ -219,9 +261,9 @@ class AudioManager: ObservableObject {
         
         do {
             let audioFile = try AVAudioFile(forReading: url)
-            let format = audioFile.processingFormat
             
-            guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(audioFile.length)) else {
+            // The buffer will now be in the canonical format.
+            guard let buffer = AVAudioPCMBuffer(pcmFormat: canonicalFormat, frameCapacity: AVAudioFrameCount(audioFile.length)) else {
                  print("Could not create buffer")
                  return
             }
@@ -244,13 +286,11 @@ class AudioManager: ObservableObject {
             engine.attach(reverbNode)
             engine.attach(delayNode)
 
-            // Build the per-track audio graph:
-            // Player -> Reverb -> Delay -> MainMixer
-            // We connect using 'nil' for the format to let the engine determine
-            // the best format, which avoids the -10868 format mismatch error.
-            engine.connect(playerNode, to: reverbNode, format: nil)
-            engine.connect(reverbNode, to: delayNode, format: nil)
-            engine.connect(delayNode, to: mainMixer, format: nil)
+            // Build the per-track audio graph using the canonical format.
+            // This ensures perfect format compatibility between all nodes.
+            engine.connect(playerNode, to: reverbNode, format: canonicalFormat)
+            engine.connect(reverbNode, to: delayNode, format: canonicalFormat)
+            engine.connect(delayNode, to: mainMixer, format: canonicalFormat)
             
             // Set initial effect values (i.e., off)
             reverbNode.wetDryMix = 0
