@@ -1,3 +1,4 @@
+.env
 /python/jamsession3
 *.pyc
 /JamSession3.xcodeproj

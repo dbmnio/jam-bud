@@ -26,6 +26,8 @@ struct Track: Codable, Identifiable {
     var volume: Float
     var is_playing: Bool
     var path: String?
+    var reverb: Float?
+    var delay: Float?
 }
 
 /**

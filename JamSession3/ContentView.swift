@@ -123,18 +123,19 @@ struct TrackView: View {
 struct ContentView_Previews: PreviewProvider {
     static var previews: some View {
         // To make the preview work, we need to create mock/stub versions
-        // of our managers and AppState.
+        // of our managers and AppState, following the same dependency
+        // injection pattern as the main app.
         let audioManager = AudioManager()
-        let speechManager = SpeechManager()
+        let speechManager = SpeechManager(audioManager: audioManager)
         let appState = AppState(audioManager: audioManager, speechManager: speechManager)
         
         // Populate with some mock data for the preview
         appState.agentState = AgentState(
             history_node_id: "preview-node",
             tracks: [
-                Track(id: "track_0", name: "Guitar Loop", volume: 0.8, is_playing: true, path: "loop_1.mp3"),
-                Track(id: "track_1", name: "AI Drums", volume: 1.0, is_playing: true, path: "gen_1.mp3"),
-                Track(id: "track_2", name: "Muted Vocals", volume: 0.6, is_playing: false, path: "loop_2.mp3")
+                Track(id: "track_0", name: "Guitar Loop", volume: 0.8, is_playing: true, path: "/tmp/loop_1.caf", reverb: 0, delay: 0),
+                Track(id: "track_1", name: "AI Drums", volume: 1.0, is_playing: true, path: "/tmp/gen_1.caf", reverb: 25, delay: 0),
+                Track(id: "track_2", name: "Muted Vocals", volume: 0.6, is_playing: false, path: "/tmp/loop_2.caf", reverb: 0, delay: 50)
             ],
             next_track_id: 3
         )

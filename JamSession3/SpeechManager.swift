@@ -22,13 +22,18 @@ class SpeechManager: NSObject, ObservableObject {
     private let speechRecognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
-    private let audioEngine = AVAudioEngine()
+    // Remove the local audio engine. We will use the shared AudioManager.
+    // private let audioEngine = AVAudioEngine()
+    
+    // Add a reference to the shared AudioManager.
+    private let audioManager: AudioManager
     
     // Speech Synthesis
     private let speechSynthesizer = AVSpeechSynthesizer()
 
     /// Initializes the SpeechManager.
-    override init() {
+    init(audioManager: AudioManager) {
+        self.audioManager = audioManager
         super.init()
         speechRecognizer?.delegate = self
     }
@@ -53,9 +58,9 @@ class SpeechManager: NSObject, ObservableObject {
     func startTranscribing() {
         guard !isRecording else { return }
         
-        if let recognitionTask = recognitionTask {
-            recognitionTask.cancel()
-            self.recognitionTask = nil
+        if recognitionTask != nil {
+            recognitionTask?.cancel()
+            recognitionTask = nil
         }
         
         recognitionRequest = SFSpeechAudioBufferRecognitionRequest()
@@ -66,31 +71,20 @@ class SpeechManager: NSObject, ObservableObject {
         
         recognitionTask = speechRecognizer?.recognitionTask(with: recognitionRequest) { result, error in
             var isFinal = false
-            
             if let result = result {
                 self.transcribedText = result.bestTranscription.formattedString
                 isFinal = result.isFinal
             }
-            
             if error != nil || isFinal {
-                self.stopTranscribing() // Ensure we stop if the task ends
+                self.stopTranscribing()
             }
         }
         
-        // Use a dedicated audio engine instance for speech recognition
-        let recordingFormat = audioEngine.inputNode.outputFormat(forBus: 0)
-        audioEngine.inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { (buffer, _) in
-            self.recognitionRequest?.append(buffer)
+        // Use the shared AudioManager as the source for audio buffers.
+        let speechConsumer: (AVAudioPCMBuffer) -> Void = { [weak self] buffer in
+            self?.recognitionRequest?.append(buffer)
         }
-        
-        audioEngine.prepare()
-        
-        do {
-            try audioEngine.start()
-        } catch {
-            print("audioEngine couldn't start because of an error: \(error.localizedDescription)")
-            stopTranscribing()
-        }
+        audioManager.addAudioBufferConsumer(speechConsumer, withKey: "speechRecognizer")
 
         isRecording = true
         transcribedText = ""
@@ -100,8 +94,8 @@ class SpeechManager: NSObject, ObservableObject {
     func stopTranscribing() {
         guard isRecording else { return }
         
-        audioEngine.stop()
-        audioEngine.inputNode.removeTap(onBus: 0)
+        // Remove the audio consumer from the shared AudioManager.
+        audioManager.removeAudioBufferConsumer(withKey: "speechRecognizer")
         
         recognitionRequest?.endAudio()
         recognitionTask?.cancel()
