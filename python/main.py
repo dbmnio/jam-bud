@@ -81,9 +81,22 @@ def analysis_node_router(state: AgentState):
     return "suggestion_node"
 
 def no_op_node(state: AgentState, history: HistoryManager):
-    """A node that performs no action and simply returns the current state."""
+    """
+    A node that performs no action but returns the complete current state
+    to the client. This is used for initialization.
+    """
     print("Executing no_op_node")
-    state["response"] = {} # Return an empty response, signaling success with no action
+    
+    # To avoid circular references, the payload for the 'load_state' action
+    # must be a clean copy of the state data.
+    state_payload = state.copy()
+    if "response" in state_payload:
+        del state_payload["response"]
+        
+    state["response"] = {
+        "action": "load_state",
+        "state": state_payload
+    }
     return state
 
 def record_node(state: AgentState, history: HistoryManager):
