@@ -3,3 +3,6 @@
 /JamSession3.xcodeproj
 .DS_Store
 python/project.db
+
+*.mp3
+*.m4a
