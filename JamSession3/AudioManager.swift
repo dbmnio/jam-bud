@@ -26,9 +26,15 @@ class AudioManager: ObservableObject {
     // Define a type for a closure that consumes audio buffers.
     typealias AudioBufferConsumer = (AVAudioPCMBuffer) -> Void
     
+    private struct TrackNodes {
+        var player: AVAudioPlayerNode
+        var reverb: AVAudioUnitReverb
+        var delay: AVAudioUnitDelay
+    }
+    
     private var engine = AVAudioEngine()
     private var mainMixer = AVAudioMixerNode()
-    private var playerNodes = [String: AVAudioPlayerNode]()
+    private var tracks = [String: TrackNodes]()
     private var isRecording = false
     private var recordingOutputFileURL: URL?
     private var outputFile: AVAudioFile?
@@ -221,11 +227,34 @@ class AudioManager: ObservableObject {
             }
             try audioFile.read(into: buffer)
 
+            // Create all nodes for this track
             let playerNode = AVAudioPlayerNode()
-            playerNodes[trackID] = playerNode
+            let reverbNode = AVAudioUnitReverb()
+            let delayNode = AVAudioUnitDelay()
+
+            // Store them in our dictionary
+            tracks[trackID] = TrackNodes(
+                player: playerNode,
+                reverb: reverbNode,
+                delay: delayNode
+            )
             
+            // Attach all new nodes to the engine
             engine.attach(playerNode)
-            engine.connect(playerNode, to: mainMixer, format: format)
+            engine.attach(reverbNode)
+            engine.attach(delayNode)
+
+            // Build the per-track audio graph:
+            // Player -> Reverb -> Delay -> MainMixer
+            // We connect using 'nil' for the format to let the engine determine
+            // the best format, which avoids the -10868 format mismatch error.
+            engine.connect(playerNode, to: reverbNode, format: nil)
+            engine.connect(reverbNode, to: delayNode, format: nil)
+            engine.connect(delayNode, to: mainMixer, format: nil)
+            
+            // Set initial effect values (i.e., off)
+            reverbNode.wetDryMix = 0
+            delayNode.wetDryMix = 0
 
             playerNode.scheduleBuffer(buffer, at: nil, options: .loops)
             
@@ -271,12 +300,12 @@ class AudioManager: ObservableObject {
      * @param volume The new volume level, from 0.0 (silent) to 1.0 (full volume).
      */
     func setVolume(forTrack trackID: String, volume: Float) {
-        guard let playerNode = playerNodes[trackID] else {
+        guard let trackNodes = tracks[trackID] else {
             print("Error: Track with ID \(trackID) not found for volume adjustment.")
             return
         }
         // Ensure volume is clamped between 0.0 and 1.0
-        playerNode.volume = max(0.0, min(volume, 1.0))
+        trackNodes.player.volume = max(0.0, min(volume, 1.0))
         print("Set volume for track \(trackID) to \(volume)")
     }
 
@@ -286,11 +315,11 @@ class AudioManager: ObservableObject {
      * @param trackID The identifier of the track to mute.
      */
     func muteTrack(trackID: String) {
-        guard let playerNode = playerNodes[trackID] else {
+        guard let trackNodes = tracks[trackID] else {
             print("Error: Track with ID \(trackID) not found for muting.")
             return
         }
-        playerNode.volume = 0.0
+        trackNodes.player.volume = 0.0
         print("Muted track \(trackID)")
     }
     
@@ -301,11 +330,11 @@ class AudioManager: ObservableObject {
      * @param volume The volume level to restore the track to.
      */
     func unmuteTrack(trackID: String, volume: Float) {
-        guard let playerNode = playerNodes[trackID] else {
+        guard let trackNodes = tracks[trackID] else {
             print("Error: Track with ID \(trackID) not found for unmuting.")
             return
         }
-        playerNode.volume = max(0.0, min(volume, 1.0))
+        trackNodes.player.volume = max(0.0, min(volume, 1.0))
         print("Unmuted track \(trackID) to volume \(volume)")
     }
 
@@ -319,8 +348,8 @@ class AudioManager: ObservableObject {
              print("Engine not running.")
              return
         }
-        for player in playerNodes.values {
-            player.play()
+        for trackNodes in tracks.values {
+            trackNodes.player.play()
         }
         print("Playing all loops.")
     }
@@ -331,9 +360,40 @@ class AudioManager: ObservableObject {
      * Iterates through all existing player nodes and calls the stop() method on each.
      */
     func stopAll() {
-        for player in playerNodes.values {
-            player.stop()
+        for trackNodes in tracks.values {
+            trackNodes.player.stop()
         }
         print("Stopped all loops.")
+    }
+
+    /**
+     * Sets the reverb level for a specific track.
+     *
+     * @param trackID The identifier of the track to modify.
+     * @param value The wet/dry mix for the reverb, from 0 (dry) to 100 (wet).
+     */
+    func setReverb(for trackID: String, to value: Float) {
+        guard let trackNodes = tracks[trackID] else {
+            print("Error: Could not find track with ID \(trackID) to set reverb.")
+            return
+        }
+        // The value is expected to be 0-100, so we clamp and normalize it.
+        trackNodes.reverb.wetDryMix = max(0, min(100, value))
+        print("Set reverb for track \(trackID) to \(value)")
+    }
+
+    /**
+     * Sets the delay level for a specific track.
+     *
+     * @param trackID The identifier of the track to modify.
+     * @param value The wet/dry mix for the delay, from 0 (dry) to 100 (wet).
+     */
+    func setDelay(for trackID: String, to value: Float) {
+        guard let trackNodes = tracks[trackID] else {
+            print("Error: Could not find track with ID \(trackID) to set delay.")
+            return
+        }
+        trackNodes.delay.wetDryMix = max(0, min(100, value))
+        print("Set delay for track \(trackID) to \(value)")
     }
 } 

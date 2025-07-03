@@ -41,6 +41,9 @@ def router_node(state: AgentState):
     command = state.get("command", "").lower()
     print(f"Routing command: {command}")
 
+    if not command:
+        return "no_op_node"
+
     # Use exact matching for commands sent by the dedicated UI button.
     if command == "record":
         return "record_node"
@@ -77,6 +80,12 @@ def analysis_node_router(state: AgentState):
     """A simple router that always directs from analysis to suggestion."""
     return "suggestion_node"
 
+def no_op_node(state: AgentState, history: HistoryManager):
+    """A node that performs no action and simply returns the current state."""
+    print("Executing no_op_node")
+    state["response"] = {} # Return an empty response, signaling success with no action
+    return state
+
 def record_node(state: AgentState, history: HistoryManager):
     """Prepares the command to start recording. This is a non-state-changing action."""
     print("Executing record node")
@@ -100,7 +109,11 @@ def stop_node(state: AgentState, history: HistoryManager):
     new_state["tracks"].append(new_track)
     new_state["next_track_id"] += 1
     
-    new_state["response"] = {"action": "stop_recording_and_create_loop", "track_id": new_track_id}
+    # The response now includes the full track object for the client
+    new_state["response"] = {
+        "action": "stop_recording_and_create_loop",
+        "track": new_track
+    }
 
     # Commit the new state to the history tree.
     # The commit method will generate an ID and add it to the new_state object.
@@ -245,6 +258,7 @@ if history.get_root_node_id() is None:
     history.commit(initial_state, parent_id=None)
 
 node_map = {
+    "no_op_node": no_op_node,
     "record_node": record_node,
     "stop_node": stop_node,
     "modify_track_node": modify_track_node,

@@ -18,23 +18,19 @@ class SpeechManager: NSObject, ObservableObject {
     @Published var transcribedText: String = ""
     @Published var isRecording: Bool = false
     
-    // Dependencies
-    private var audioManager: AudioManager
-    
     // Speech Recognition
-    private let speechRecognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))!
+    private let speechRecognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
+    private let audioEngine = AVAudioEngine()
     
     // Speech Synthesis
     private let speechSynthesizer = AVSpeechSynthesizer()
 
     /// Initializes the SpeechManager.
-    /// - Parameter audioManager: The shared AudioManager instance.
-    init(audioManager: AudioManager) {
-        self.audioManager = audioManager
+    override init() {
         super.init()
-        speechRecognizer.delegate = self
+        speechRecognizer?.delegate = self
     }
 
     /// Requests user authorization for speech recognition.
@@ -68,7 +64,7 @@ class SpeechManager: NSObject, ObservableObject {
         }
         recognitionRequest.shouldReportPartialResults = true
         
-        recognitionTask = speechRecognizer.recognitionTask(with: recognitionRequest) { result, error in
+        recognitionTask = speechRecognizer?.recognitionTask(with: recognitionRequest) { result, error in
             var isFinal = false
             
             if let result = result {
@@ -81,28 +77,34 @@ class SpeechManager: NSObject, ObservableObject {
             }
         }
         
-        // Register as a consumer with the AudioManager
-        audioManager.addAudioBufferConsumer(self.handleAudioBuffer, withKey: "speechRecognizer")
+        // Use a dedicated audio engine instance for speech recognition
+        let recordingFormat = audioEngine.inputNode.outputFormat(forBus: 0)
+        audioEngine.inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { (buffer, _) in
+            self.recognitionRequest?.append(buffer)
+        }
+        
+        audioEngine.prepare()
+        
+        do {
+            try audioEngine.start()
+        } catch {
+            print("audioEngine couldn't start because of an error: \(error.localizedDescription)")
+            stopTranscribing()
+        }
 
         isRecording = true
         transcribedText = ""
     }
     
-    /// Receives an audio buffer from the AudioManager and appends it to the recognition request.
-    /// - Parameter buffer: The audio buffer from the microphone input.
-    private func handleAudioBuffer(buffer: AVAudioPCMBuffer) {
-        self.recognitionRequest?.append(buffer)
-    }
-
     /// Stops transcription.
     func stopTranscribing() {
         guard isRecording else { return }
         
-        // Unregister from the AudioManager
-        audioManager.removeAudioBufferConsumer(withKey: "speechRecognizer")
+        audioEngine.stop()
+        audioEngine.inputNode.removeTap(onBus: 0)
         
         recognitionRequest?.endAudio()
-        recognitionTask?.cancel() // Use cancel to ensure task is fully torn down
+        recognitionTask?.cancel()
         
         self.recognitionRequest = nil
         self.recognitionTask = nil

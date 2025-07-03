@@ -4,78 +4,78 @@
 //
 //  Created by David Matthew on 7/1/25.
 //
-//  This is the main view of the application. It provides a simple
-//  interface for sending commands to the AI agent.
+//  This is the main view of the application. It provides the user
+//  interface for interacting with the AI music looper.
 //
 
 import SwiftUI
 
 struct ContentView: View {
-    // State Objects for managing app logic
-    @StateObject private var audioManager = AudioManager()
-    // SpeechManager now depends on AudioManager, so we initialize it in the view's init.
-    @StateObject private var speechManager: SpeechManager
-    @StateObject private var agentClient = AgentClient()
-
-    @State private var agentStatus: String = "Ready"
-    @State private var trackCount = 0
+    // The AppState is the single source of truth for our UI.
+    @EnvironmentObject var appState: AppState
+    
+    // Local state for the view
     @State private var isRecordingLoop = false
-
-    init() {
-        // Create the AudioManager first
-        let audioManager = AudioManager()
-        // Now create the SpeechManager and pass the AudioManager to it
-        _speechManager = StateObject(wrappedValue: SpeechManager(audioManager: audioManager))
-        // Assign the same AudioManager instance to the property
-        _audioManager = StateObject(wrappedValue: audioManager)
-    }
 
     var body: some View {
         VStack(spacing: 15) {
             Text("AI Music Looper")
                 .font(.largeTitle)
                 .padding(.bottom, 5)
-
-            // Display for agent status and transcribed text
-            VStack {
-                Text(agentStatus)
-                    .font(.headline)
+            
+            // A simple status indicator for listening
+            if appState.speechManager.isRecording {
+                Text("Listening...")
                     .foregroundColor(.secondary)
-                Text(speechManager.transcribedText)
-                    .font(.body)
-                    .foregroundColor(.primary)
-                    .frame(minHeight: 40)
             }
-            .padding()
+
+            // List of Tracks
+            List {
+                if let tracks = appState.agentState?.tracks, !tracks.isEmpty {
+                    ForEach(tracks) { track in
+                        TrackView(track: track)
+                    }
+                } else {
+                    Text("No tracks yet. Record something!")
+                        .foregroundColor(.secondary)
+                }
+            }
+            .listStyle(PlainListStyle())
+            .frame(minHeight: 150)
 
             // Main interaction buttons
             HStack(spacing: 20) {
                 // Button 1: Record/Stop Toggle
                 Button(action: {
-                    let command = isRecordingLoop ? "stop" : "record"
-                    postCommand(command)
+                    isRecordingLoop.toggle()
+                    let command = isRecordingLoop ? "record" : "stop"
+                    Task {
+                        await appState.sendCommand(text: command)
+                    }
                 }) {
-                    Text(isRecordingLoop ? "Stop" : "Record")
+                    Text(isRecordingLoop ? "Stop Recording" : "Start Recording")
                         .frame(width: 150, height: 50)
                         .background(isRecordingLoop ? Color.red : Color.green)
                         .foregroundColor(.white)
                         .cornerRadius(10)
                 }
 
-                // Button 2: Push to Talk
+                // Button 2: Push to Talk for voice commands
                 Button(action: {
-                    if speechManager.isRecording {
-                        speechManager.stopTranscribing()
-                        if !speechManager.transcribedText.isEmpty {
-                            postCommand(speechManager.transcribedText)
+                    if appState.speechManager.isRecording {
+                        appState.speechManager.stopTranscribing()
+                        if !appState.speechManager.transcribedText.isEmpty {
+                            Task {
+                                await appState.sendCommand(text: appState.speechManager.transcribedText)
+                            }
                         }
                     } else {
-                        speechManager.startTranscribing()
+                        appState.speechManager.startTranscribing()
                     }
                 }) {
-                    Text(speechManager.isRecording ? "Listening..." : "Push to Talk")
+                    Text(appState.speechManager.isRecording ? "Finish Talking" : "Push to Talk")
                         .frame(width: 150, height: 50)
-                        .background(speechManager.isRecording ? Color.purple : Color.blue)
+                        .background(appState.speechManager.isRecording ? Color.purple : Color.blue)
                         .foregroundColor(.white)
                         .cornerRadius(10)
                 }
@@ -84,80 +84,62 @@ struct ContentView: View {
 
             Spacer()
         }
-        .frame(minWidth: 450, minHeight: 300)
-        .onAppear(perform: speechManager.requestPermission)
-    }
-
-    /// Sends a transcribed command to the agent and handles the response.
-    private func postCommand(_ command: String) {
-        Task {
-            do {
-                let response = try await agentClient.postCommand(command: command)
-                await MainActor.run {
-                    handle(response: response)
-                }
-            } catch {
-                await MainActor.run {
-                    agentStatus = "Error: \(error.localizedDescription)"
-                }
-            }
-        }
-    }
-
-    /// Processes the agent's response and calls the appropriate managers.
-    private func handle(response: AgentResponse) {
-        // Handle spoken feedback first
-        if let textToSpeak = response.speak {
-            speechManager.speak(textToSpeak)
-            agentStatus = textToSpeak
-        }
-
-        // Handle audio engine actions
-        if let action = response.action {
-            switch action {
-            case "start_recording":
-                audioManager.startRecording()
-                isRecordingLoop = true
-                agentStatus = "Recording..."
-            case "stop_recording_and_create_loop":
-                guard let trackID = response.track_id else {
-                    agentStatus = "Error: stop_recording action missing track_id"
-                    return
-                }
-                audioManager.stopRecordingAndCreateLoop(trackID: trackID)
-                trackCount += 1
-                isRecordingLoop = false
-                agentStatus = "Looping \(trackCount) track(s)"
-                // Automatically start playing all tracks after creating a new one.
-                audioManager.playAll()
-            case "set_volume":
-                guard let trackID = response.track_id, let volume = response.volume else {
-                    agentStatus = "Error: set_volume action missing parameters"
-                    return
-                }
-                audioManager.setVolume(forTrack: trackID, volume: volume)
-                agentStatus = "Set volume for \(trackID) to \(volume)"
-            case "mute_track":
-                guard let trackID = response.track_id else {
-                    agentStatus = "Error: mute_track action missing track_id"
-                    return
-                }
-                audioManager.muteTrack(trackID: trackID)
-                agentStatus = "Muted track \(trackID)"
-            case "unmute_track":
-                guard let trackID = response.track_id, let volume = response.volume else {
-                    agentStatus = "Error: unmute_track action missing parameters"
-                    return
-                }
-                audioManager.unmuteTrack(trackID: trackID, volume: volume)
-                agentStatus = "Unmuted track \(trackID)"
-            default:
-                agentStatus = "Received unknown action: \(action)"
+        .frame(minWidth: 450, minHeight: 350)
+        .padding()
+        .onAppear {
+            // Send an empty command on appear to get the initial state from the agent
+            Task {
+                await appState.sendCommand(text: "")
             }
         }
     }
 }
 
-#Preview {
-    ContentView()
+/// A view that represents a single track in the list.
+struct TrackView: View {
+    let track: Track
+
+    var body: some View {
+        HStack {
+            Image(systemName: track.is_playing ? "speaker.wave.2.fill" : "speaker.slash.fill")
+                .foregroundColor(track.is_playing ? .green : .red)
+            Text(track.name)
+                .font(.headline)
+            Spacer()
+            VStack(alignment: .trailing) {
+                Text("Volume: \(Int(track.volume * 100))%")
+                if let path = track.path {
+                    Text(path)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+        }
+        .padding(.vertical, 8)
+    }
+}
+
+
+struct ContentView_Previews: PreviewProvider {
+    static var previews: some View {
+        // To make the preview work, we need to create mock/stub versions
+        // of our managers and AppState.
+        let audioManager = AudioManager()
+        let speechManager = SpeechManager()
+        let appState = AppState(audioManager: audioManager, speechManager: speechManager)
+        
+        // Populate with some mock data for the preview
+        appState.agentState = AgentState(
+            history_node_id: "preview-node",
+            tracks: [
+                Track(id: "track_0", name: "Guitar Loop", volume: 0.8, is_playing: true, path: "loop_1.mp3"),
+                Track(id: "track_1", name: "AI Drums", volume: 1.0, is_playing: true, path: "gen_1.mp3"),
+                Track(id: "track_2", name: "Muted Vocals", volume: 0.6, is_playing: false, path: "loop_2.mp3")
+            ],
+            next_track_id: 3
+        )
+
+        return ContentView()
+            .environmentObject(appState)
+    }
 }
