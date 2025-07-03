@@ -91,16 +91,16 @@ The goal is to implement the core creative features that make the app powerful a
 
 #### **Tasks:**
 
-1. **Music Generation (Python):**  
-   * Implement a MusicGenerationNode in LangGraph.  
-   * This node will call an external music generation API, passing the current State's tempo and key as parameters.  
-   * It will receive the generated audio, save it, and update the State with the new track.  
-2. **Undo/Redo Functionality (Python/LangGraph):**  
-   * Implement a MemorySaver checkpoint for the LangGraph.  
-   * Create an UndoNode that reverts the graph to the previous checkpoint.  
-3. **Creative Suggestions (Python):**  
-   * Implement an AnalysisNode that can summarize the current state (e.g., "A 120 BPM track in A Minor with guitar and drums").  
-   * Feed this summary to a SuggestionNode that uses an LLM to generate creative ideas.  
+1. **Music Generation (Python):**  ✅ **Completed**
+   * Implement a `MusicGenerationNode` in LangGraph.  
+   * This node calls the external Replicate API (`meta/musicgen` model) to generate new audio tracks based on user prompts.
+   * It receives the generated audio, saves it locally, and updates the agent's state with the new track.  
+2. **Undo/Redo Functionality (Python/LangGraph):**  ✅ **Completed**
+   * Implement a `HistoryManager` using SQLite for robust, branching state history.
+   * Create an `UndoNode` that reverts the graph to the previous state.
+3. **Creative Suggestions (Python):** ✅ **Completed (Placeholder)**
+   * Implement an `AnalysisNode` that can summarize the current state (e.g., "A 120 BPM track in A Minor with guitar and drums").  
+   * Feed this summary to a `SuggestionNode` that uses an LLM to generate creative ideas.
 4. **Audio Effects (Swift):**  
    * Integrate native Audio Unit effects (e.g., AVAudioUnitReverb, AVAudioUnitDelay) into the AVAudioEngine graph.  
    * Expose controls for these effects so the Python agent can enable/disable them on specific tracks.  
