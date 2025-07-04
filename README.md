@@ -28,6 +28,9 @@ source jamsession3/bin/activate
 # 4. Install the required dependencies
 pip install "fastapi[all]" uvicorn
 
+# 5. Include the necessary environment variables
+printf 'OPENAI_API_KEY=<your openAI api key>\nREPLICATE_API_TOKEN=<your replicate api token>\n' > .env
+
 # 5. Start the server
 # The server will run on http://127.0.0.1:8000
 ./run_server.sh
