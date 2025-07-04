@@ -11,6 +11,13 @@ Follow these instructions to set up and run the application on your local machin
 -   macOS with Xcode installed
 -   Python 3.8+
 
+### 0. Clone the repo
+
+```bash
+git clone <repo url>
+cd jam-bud
+```
+
 ### 1. Backend Setup (Python Server)
 
 The Python backend uses FastAPI to process commands from the native macOS application.
