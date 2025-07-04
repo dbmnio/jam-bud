@@ -26,7 +26,7 @@ python3 -m venv jamsession3
 source jamsession3/bin/activate
 
 # 4. Install the required dependencies
-pip install "fastapi[all]" uvicorn
+pip install -r requirements.txt
 
 # 5. Include the necessary environment variables
 printf 'OPENAI_API_KEY=<your openAI api key>\nREPLICATE_API_TOKEN=<your replicate api token>\n' > .env
